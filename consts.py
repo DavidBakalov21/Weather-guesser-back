@@ -1,0 +1,1 @@
+MONGO_STRING="mongodb+srv://dbakalov:mmBOhXcWsxMqF7ek@djangoapp.cpm7frk.mongodb.net/?retryWrites=true&w=majority&appName=djangoApp"
