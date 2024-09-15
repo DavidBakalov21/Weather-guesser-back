@@ -20,7 +20,7 @@ async def get_all_users_data():
         return []
 
 async def check_user(user_id):
-    existing_user = await collection.find_one({'user_id': user_id})
+    existing_user = await collection.find_one({'user_id': user_id}, {'_id': 1})
     if existing_user:
         return True
     else:
@@ -89,14 +89,14 @@ async def update_user_points(user_id, points):
     await collection.update_one(
         {'user_id': user_id},
         {'$inc': {'points': points}},
-        upsert=True
+        #upsert=True
     )
 
 async def update_days(user_id, days):
     await collection.update_one(
         {'user_id': user_id},
         {'$inc': {'days_visited': days}}, 
-        upsert=True
+        #upsert=True
     )
 async def get_user_days(user_id):
     user_data = await collection.find_one(
@@ -137,3 +137,13 @@ async def get_ref_link(user_id):
         return user_data['ref_link']  
     else:
         return None
+    
+async def update_inviter_points(player_id, points):
+    user_data = await collection.find_one(
+        {'user_id': player_id}, 
+        {'invited_by': 1, '_id': 0}
+    )
+    if user_data and user_data.get('invited_by'):
+        inviter_id=user_data['invited_by']
+        await update_user_points(inviter_id, points)
+

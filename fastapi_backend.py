@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from helpers.ref_helper import generate_referral_link, decode_user_id_from_token
 from db_fast_version import update_user_points, update_last_visit, get_user_last_visit, get_user_points, check_user, update_days, get_user_days, register_user, get_last_play, set_last_play
-from db_fast_version import get_ref_link
+from db_fast_version import get_ref_link,update_inviter_points
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+import math
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -97,12 +98,14 @@ async def record_game(data: RecordGame):
     try:
         id = data.telegram_id
         points = data.points
+        points_for_inviter = math.ceil(points * 0.05)
         last_play = await get_last_play(id)
         today = datetime.now().date()
 
         # Check if it's the user's first play or a new day
         if last_play is None or last_play.date() != today:
             await update_user_points(id, points)
+            await update_inviter_points(id, points_for_inviter)
 
         # Set last play date to today
         await set_last_play(id)
