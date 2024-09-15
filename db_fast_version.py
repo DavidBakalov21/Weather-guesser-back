@@ -127,3 +127,13 @@ async def get_last_play(user_id):
     else:
         print("Returned none")
         return None
+
+async def get_ref_link(user_id):
+    user_data = await collection.find_one(
+        {'user_id': user_id}, 
+        {'ref_link': 1, '_id': 0}
+    )
+    if user_data and 'ref_link' in user_data:
+        return user_data['ref_link']  
+    else:
+        return None

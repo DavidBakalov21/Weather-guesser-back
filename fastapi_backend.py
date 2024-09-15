@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from helpers.ref_helper import generate_referral_link, decode_user_id_from_token
 from db_fast_version import update_user_points, update_last_visit, get_user_last_visit, get_user_points, check_user, update_days, get_user_days, register_user, get_last_play, set_last_play
+from db_fast_version import get_ref_link
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -66,6 +67,13 @@ async def starter(data: UserData):
     id = data.telegram_id
     return {
         'registered': await check_user(id)
+    }
+
+@app.post("/get_ref_link")
+async def get_link(data:UserData):
+    id=data.telegram_id
+    return {
+        "link": await get_ref_link(id)
     }
 
 @app.post("/register")
