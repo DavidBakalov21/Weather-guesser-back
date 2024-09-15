@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException
+from helpers.ref_helper import generate_referral_link, decode_user_id_from_token
 from db_fast_version import update_user_points, update_last_visit, get_user_last_visit, get_user_points, check_user, update_days, get_user_days, register_user, get_last_play, set_last_play
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
-
+from typing import Optional
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -29,6 +30,7 @@ class UserData(BaseModel):
 class RegisterUser(BaseModel):
     telegram_id: int
     username: str
+    invited_by:Optional[str] = None
 
 class RecordGame(BaseModel):
     telegram_id: int
@@ -71,7 +73,11 @@ async def register(data: RegisterUser):
     try:
         id = data.telegram_id
         name = data.username
-        await register_user(id, name)
+        invited_by=data.invited_by
+        if invited_by:
+            invited_by=int(decode_user_id_from_token(invited_by))
+        link=generate_referral_link(id)
+        await register_user(id, name,invited_by,link)
         return {
             'status': "success"
         }

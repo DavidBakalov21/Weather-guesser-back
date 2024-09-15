@@ -26,7 +26,7 @@ async def check_user(user_id):
     else:
         return False
 
-async def register_user(user_id, name):
+async def register_user(user_id, name, inviter_id, link):
     if not await check_user(user_id):
         user_data = {
             'user_name': name,
@@ -34,9 +34,14 @@ async def register_user(user_id, name):
             "points":0,
             "last_visit": None,
             "days_visited":0,
-            "last_play":None
+            "last_play":None,
+            "invited":[],
+            "invited_by":inviter_id,
+            "ref_link":link
         }
         await collection.insert_one(user_data)
+        if inviter_id:
+            await reward_inviter(inviter_id, user_id)
 
 async def update_last_visit(user_id):
     print("Update last visit")
@@ -70,6 +75,15 @@ async def get_user_points(user_id):
     else:
         return None
 
+async def reward_inviter(inviter_id, invited_id):
+    await update_user_points(inviter_id,40)
+    await update_inviter_list(inviter_id, invited_id)
+
+async def update_inviter_list(inviter_id, invited_id):
+    await collection.update_one(
+        {'user_id': inviter_id},
+        {"$push": {"invited": invited_id}}
+    )
 
 async def update_user_points(user_id, points):
     await collection.update_one(
