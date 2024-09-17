@@ -147,3 +147,12 @@ async def update_inviter_points(player_id, points):
         inviter_id=user_data['invited_by']
         await update_user_points(inviter_id, points)
 
+async def get_friends(user_id):
+    user_data = await collection.find_one(
+        {'user_id': user_id}, 
+        {'invited': 1, '_id': 0}
+    )
+    if user_data and 'invited' in user_data:
+        return len(user_data['invited'])
+    else:
+        return None

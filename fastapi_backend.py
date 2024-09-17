@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from helpers.ref_helper import generate_referral_link, decode_user_id_from_token
 from db_fast_version import update_user_points, update_last_visit, get_user_last_visit, get_user_points, check_user, update_days, get_user_days, register_user, get_last_play, set_last_play
-from db_fast_version import get_ref_link,update_inviter_points
+from db_fast_version import get_ref_link,update_inviter_points, get_friends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -58,7 +58,8 @@ async def points_endpoint(data: UserData):
         return {
             'points': await get_user_points(id),
             'days': await get_user_days(id),
-            'last_played_date': await get_last_play(id)
+            'last_played_date': await get_last_play(id),
+            'friends': await get_friends(id)
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
