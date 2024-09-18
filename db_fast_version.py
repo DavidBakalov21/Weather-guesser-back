@@ -153,6 +153,12 @@ async def get_friends(user_id):
         {'invited': 1, '_id': 0}
     )
     if user_data and 'invited' in user_data:
-        return len(user_data['invited'])
+        friend_ids = user_data['invited']
+        friends_data = await collection.find(
+            {'user_id': {'$in': friend_ids}}, 
+            {'user_name': 1, '_id': 0}
+        ).to_list(length=len(friend_ids))
+        friends = [friend['user_name'] for friend in friends_data if 'user_name' in friend]
+        return friends
     else:
         return None
