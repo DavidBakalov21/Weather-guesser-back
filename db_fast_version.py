@@ -12,8 +12,6 @@ async def get_all_users_data():
     try:
         # Fetch all documents from the collection
         users = await list(collection.find({}))
-        
-        # Convert the cursor to a list of dictionaries and return
         return users
     except Exception as e:
         print(f"An error occurred while retrieving users data: {e}")
@@ -51,30 +49,6 @@ async def update_last_visit(user_id):
         {'$set': {'last_visit': datetime.now()}}
     )
 
-async def get_user_last_visit(user_id):
-    user_data = await collection.find_one(
-        {'user_id': user_id}, 
-        {'last_visit': 1, '_id': 0}  # Project only 'last_visit' field
-    )
-    #print("User data"+str(user_data))
-    if user_data and 'last_visit' in user_data:
-        #print("Returned last visit"+user_data['last_visit'])
-        return user_data['last_visit']
-        
-    else:
-        print("Returned none")
-        return None
-    
-async def get_user_points(user_id):
-    user_data = await collection.find_one(
-        {'user_id': user_id}, 
-        {'points': 1, '_id': 0}  # Project only 'last_visit' field
-    )
-    if user_data and 'points' in user_data:
-        return user_data['points']
-    else:
-        return None
-
 async def reward_inviter(inviter_id, invited_id):
     await update_user_points(inviter_id,40)
     await update_inviter_list(inviter_id, invited_id)
@@ -98,15 +72,6 @@ async def update_days(user_id, days):
         {'$inc': {'days_visited': days}}, 
         #upsert=True
     )
-async def get_user_days(user_id):
-    user_data = await collection.find_one(
-        {'user_id': user_id}, 
-        {'days_visited': 1, '_id': 0}  # Project only 'last_visit' field
-    )
-    if user_data and 'days_visited' in user_data:
-        return user_data['days_visited']
-    else:
-        return None
     
 async def set_last_play(user_id):
     print("Update last visit")
@@ -116,28 +81,6 @@ async def set_last_play(user_id):
         {'$set': {'last_play': datetime.now()}}
     )
 
-async def get_last_play(user_id):
-    user_data = await collection.find_one(
-        {'user_id': user_id}, 
-        {'last_play': 1, '_id': 0}
-    )
-    if user_data and 'last_play' in user_data:
-        return user_data['last_play']
-        
-    else:
-        print("Returned none")
-        return None
-
-async def get_ref_link(user_id):
-    user_data = await collection.find_one(
-        {'user_id': user_id}, 
-        {'ref_link': 1, '_id': 0}
-    )
-    if user_data and 'ref_link' in user_data:
-        return user_data['ref_link']  
-    else:
-        return None
-    
 async def update_inviter_points(player_id, points):
     user_data = await collection.find_one(
         {'user_id': player_id}, 
@@ -161,4 +104,17 @@ async def get_friends(user_id):
         friends = [friend['user_name'] for friend in friends_data if 'user_name' in friend]
         return friends
     else:
+        return None
+
+async def get_user_field(user_id, field):
+    try:
+        user_data = await collection.find_one(
+            {'user_id': user_id},
+            {field: 1, '_id': 0}
+        )
+        if user_data and field in user_data:
+            return user_data[field]
+        else:
+            return None
+    except Exception as e:
         return None

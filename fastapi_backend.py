@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from helpers.ref_helper import generate_referral_link, decode_user_id_from_token
-from db_fast_version import update_user_points, update_last_visit, get_user_last_visit, get_user_points, check_user, update_days, get_user_days, register_user, get_last_play, set_last_play
-from db_fast_version import get_ref_link,update_inviter_points, get_friends
+from db_fast_version import update_user_points, update_last_visit, check_user, update_days, register_user, set_last_play
+from db_fast_version import update_inviter_points, get_friends, get_user_field
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -44,7 +44,7 @@ class RecordGame(BaseModel):
 async def points_endpoint(data: UserData):
     try:
         id = data.telegram_id
-        last_visit = await get_user_last_visit(id)
+        last_visit = await get_user_field(id, "last_visit")
         today = datetime.now().date()
 
         # Check if it's the user's first visit or a new day
@@ -56,9 +56,9 @@ async def points_endpoint(data: UserData):
         await update_last_visit(id)
 
         return {
-            'points': await get_user_points(id),
-            'days': await get_user_days(id),
-            'last_played_date': await get_last_play(id),
+            'points': await get_user_field(id,"points"),
+            'days': await get_user_field(id,"days_visited"),
+            'last_played_date': await get_user_field(id,"last_play"),
             'friends': await get_friends(id)
         }
     except Exception as e:
@@ -75,7 +75,7 @@ async def starter(data: UserData):
 async def get_link(data:UserData):
     id=data.telegram_id
     return {
-        "link": await get_ref_link(id)
+        "link": await get_user_field(id, "ref_link")
     }
 
 @app.post("/register")
@@ -100,7 +100,7 @@ async def record_game(data: RecordGame):
         id = data.telegram_id
         points = data.points
         points_for_inviter = math.ceil(points * 0.05)
-        last_play = await get_last_play(id)
+        last_play = await get_user_field(id, "last_play")
         today = datetime.now().date()
 
         # Check if it's the user's first play or a new day
