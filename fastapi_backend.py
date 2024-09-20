@@ -7,8 +7,23 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 import math
+import redis.asyncio as redis
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create the Redis client and assign it to the app's state
+    redis_client = redis.Redis(host='redis://red-crmtt8rqf0us7387i1m0:6379', port=6379, decode_responses=True)
+    app.state.redis = redis_client
+    
+    yield  # Yield control to allow the app to run
+
+    # Close the Redis client after the app is done
+    await app.state.redis.close()
 # Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+
 
 # Set up CORS
 origins = [
@@ -39,55 +54,60 @@ class RecordGame(BaseModel):
     points: int
 
 # Define routes
-
+#OK
 @app.post("/update_user_data")
 async def points_endpoint(data: UserData):
     try:
+        redis = app.state.redis
         id = data.telegram_id
         last_visit = await get_user_last_visit(id)
         today = datetime.now().date()
 
         # Check if it's the user's first visit or a new day
         if last_visit is None or last_visit.date() != today:
-            await update_user_points(id, 1)
-            await update_days(id, 1)
+            await update_user_points(id, 1, redis)
+            await update_days(id, 1, redis)
 
         # Update last visit
         await update_last_visit(id)
 
         return {
-            'points': await get_user_points(id),
-            'days': await get_user_days(id),
+            'points': await get_user_points(id, redis),
+            'days': await get_user_days(id, redis),
             'last_played_date': await get_last_play(id),
-            'friends': await get_friends(id)
+            'friends': await get_friends(id, redis)
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
+#OK
 @app.post("/start")
 async def starter(data: UserData):
+    redis = app.state.redis
     id = data.telegram_id
+    is_registered = await check_user(id, redis)
     return {
-        'registered': await check_user(id)
+        'registered': is_registered
     }
-
+#OK
 @app.post("/get_ref_link")
 async def get_link(data:UserData):
     id=data.telegram_id
+    redis = app.state.redis
     return {
-        "link": await get_ref_link(id)
+        "link": await get_ref_link(id, redis)
     }
-
+#OK
 @app.post("/register")
 async def register(data: RegisterUser):
     try:
+        redis = app.state.redis
         id = data.telegram_id
         name = data.username
         invited_by=data.invited_by
         if invited_by:
             invited_by=int(decode_user_id_from_token(invited_by))
         link=generate_referral_link(id)
-        await register_user(id, name,invited_by,link)
+        await register_user(id, name,invited_by,link, redis)
         return {
             'status': "success"
         }
@@ -99,14 +119,15 @@ async def record_game(data: RecordGame):
     try:
         id = data.telegram_id
         points = data.points
+        redis = app.state.redis
         points_for_inviter = math.ceil(points * 0.05)
         last_play = await get_last_play(id)
         today = datetime.now().date()
 
         # Check if it's the user's first play or a new day
         if last_play is None or last_play.date() != today:
-            await update_user_points(id, points)
-            await update_inviter_points(id, points_for_inviter)
+            await update_user_points(id, points, redis)
+            await update_inviter_points(id, points_for_inviter, redis)
 
         # Set last play date to today
         await set_last_play(id)
@@ -118,7 +139,7 @@ async def record_game(data: RecordGame):
 
 @app.get("/")
 async def test():
-    return "fs"
+    return "works"
 
 # To run the FastAPI app
 if __name__ == "__main__":

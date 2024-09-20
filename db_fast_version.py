@@ -1,4 +1,3 @@
-from pymongo import MongoClient
 from consts import MONGO_STRING
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,26 +7,24 @@ client = AsyncIOMotorClient(MONGO_STRING, tlsCAFile=certifi.where())
 db = client['weather_bot']
 collection = db['users']
 collection.create_index("user_id")
-async def get_all_users_data():
-    try:
-        # Fetch all documents from the collection
-        users = await list(collection.find({}))
-        
-        # Convert the cursor to a list of dictionaries and return
-        return users
-    except Exception as e:
-        print(f"An error occurred while retrieving users data: {e}")
-        return []
-
-async def check_user(user_id):
+#OK
+async def check_user(user_id, redis):
+    cached_user_status = await redis.get(f"user:{user_id}:registered")
+    if cached_user_status is not None:
+        print("redis worked for check_user")
+        return cached_user_status == "True"
     existing_user = await collection.find_one({'user_id': user_id}, {'_id': 1})
     if existing_user:
+        await redis.set(f"user:{user_id}:registered", "True",ex=604800)
+        print("redis set for check_user")  # Cache for 1 hour
         return True
     else:
+        await redis.set(f"user:{user_id}:registered", "False",ex=604800)
+        print("redis set for check_user")   # Cache for 1 hour
         return False
-
-async def register_user(user_id, name, inviter_id, link):
-    if not await check_user(user_id):
+#OK
+async def register_user(user_id, name, inviter_id, link, redis):
+    if not await check_user(user_id, redis):
         user_data = {
             'user_name': name,
             'user_id': user_id,
@@ -40,8 +37,10 @@ async def register_user(user_id, name, inviter_id, link):
             "ref_link":link
         }
         await collection.insert_one(user_data)
+        await redis.set(f"user:{user_id}:registered", "True",ex=604800)
+        await redis.set(f"user:{user_id}:ref_link", link,ex=604800)
         if inviter_id:
-            await reward_inviter(inviter_id, user_id)
+            await reward_inviter(inviter_id, user_id, redis)
 
 async def update_last_visit(user_id):
     print("Update last visit")
@@ -65,45 +64,97 @@ async def get_user_last_visit(user_id):
         print("Returned none")
         return None
     
-async def get_user_points(user_id):
+async def get_user_points(user_id, redis):
+    cached_user_points = await redis.get(f"user:{user_id}:points")
+    if cached_user_points is not None:
+        print("redis worked for get points")
+        return int(cached_user_points)
     user_data = await collection.find_one(
         {'user_id': user_id}, 
-        {'points': 1, '_id': 0}  # Project only 'last_visit' field
+        {'points': 1, '_id': 0}
     )
     if user_data and 'points' in user_data:
+        await redis.set(f"user:{user_id}:points", user_data['points'],ex=304800)
+        print("redis set for get points")
         return user_data['points']
     else:
         return None
 
-async def reward_inviter(inviter_id, invited_id):
-    await update_user_points(inviter_id,40)
-    await update_inviter_list(inviter_id, invited_id)
+async def reward_inviter(inviter_id, invited_id,redis):
+    await update_user_points(inviter_id,40,redis)
+    await update_inviter_list(inviter_id, invited_id, redis)
 
-async def update_inviter_list(inviter_id, invited_id):
+async def update_inviter_list(inviter_id, invited_id, redis):
     await collection.update_one(
         {'user_id': inviter_id},
         {"$push": {"invited": invited_id}}
     )
+    user_data = await collection.find_one({'user_id': inviter_id}, {'invited': 1, '_id': 0})
+    if user_data and 'invited' in user_data:
+        print("redis set for get update_invite")
+        await redis.set(f"user:{inviter_id}:invited", user_data['invited'],ex=404800) 
 
-async def update_user_points(user_id, points):
-    await collection.update_one(
-        {'user_id': user_id},
-        {'$inc': {'points': points}},
-        #upsert=True
-    )
 
-async def update_days(user_id, days):
+async def update_user_points(user_id, points, redis):
+    try:
+        # Try incrementing the points in Redis
+        updated_points = await redis.incrby(f"user:{user_id}:points", points)
+    except Exception as e:
+        # If Redis is unavailable, fall back to MongoDB
+        print(f"Redis is unavailable, error: {str(e)}. Falling back to MongoDB.")
+        
+        # Fetch the current points from MongoDB
+        user_data = await collection.find_one({'user_id': user_id}, {'points': 1, '_id': 0})
+        
+        if user_data and 'points' in user_data:
+            # Manually increment the points
+            updated_points = user_data['points'] + points
+            
+            # Update MongoDB with the new points
+            await collection.update_one(
+                {'user_id': user_id},
+                {'$inc': {'points': points}},
+            )
+        else:
+            # If user data is not found, initialize the points
+            updated_points = points
+            await collection.update_one(
+                {'user_id': user_id},
+                {'$set': {'points': updated_points}},
+                upsert=True  # Create the user document if it doesn't exist
+            )
+
+    else:
+        # If Redis is successful, also sync the new points with MongoDB
+        await collection.update_one(
+            {'user_id': user_id},
+            {'$set': {'points': updated_points}},
+        )
+
+    return updated_points
+
+async def update_days(user_id, days, redis):
     await collection.update_one(
         {'user_id': user_id},
         {'$inc': {'days_visited': days}}, 
-        #upsert=True
     )
-async def get_user_days(user_id):
+    user_data = await collection.find_one({'user_id': user_id}, {'days_visited': 1, '_id': 0})
+    if user_data and 'days_visited' in user_data:
+        print("redis set for get update_days")
+        await redis.set(f"user:{user_id}:days_visited", user_data['days_visited'], ex=300400) 
+
+async def get_user_days(user_id, redis):
+    cached_user_days = await redis.get(f"user:{user_id}:days_visited")
+    if cached_user_days is not None:
+        print("redis worked for get days")
+        return int(cached_user_days)
     user_data = await collection.find_one(
         {'user_id': user_id}, 
-        {'days_visited': 1, '_id': 0}  # Project only 'last_visit' field
+        {'days_visited': 1, '_id': 0}
     )
     if user_data and 'days_visited' in user_data:
+        print("redis set for get points")
+        await redis.set(f"user:{user_id}:days_visited", user_data['days_visited'],ex=300400)
         return user_data['days_visited']
     else:
         return None
@@ -127,27 +178,40 @@ async def get_last_play(user_id):
     else:
         print("Returned none")
         return None
-
-async def get_ref_link(user_id):
+#OK
+async def get_ref_link(user_id, redis):
+    cached_ref_link = await redis.get(f"user:{user_id}:ref_link")
+    if cached_ref_link is not None:
+        print("redis works for get ref_link")
+        # If cached ref_link exists, return it
+        return cached_ref_link
     user_data = await collection.find_one(
         {'user_id': user_id}, 
         {'ref_link': 1, '_id': 0}
     )
     if user_data and 'ref_link' in user_data:
-        return user_data['ref_link']  
+        await redis.set(f"user:{user_id}:ref_link", user_data['ref_link'], ex=600800)
+        print("redis set for ref link")
+        return user_data['ref_link']
     else:
         return None
+
     
-async def update_inviter_points(player_id, points):
+async def update_inviter_points(player_id, points,redis):
     user_data = await collection.find_one(
         {'user_id': player_id}, 
         {'invited_by': 1, '_id': 0}
     )
     if user_data and user_data.get('invited_by'):
         inviter_id=user_data['invited_by']
-        await update_user_points(inviter_id, points)
+        await update_user_points(inviter_id, points, redis)
 
-async def get_friends(user_id):
+async def get_friends(user_id, redis):
+    cached_friends = await redis.get(f"user:{user_id}:friends")
+    
+    if cached_friends is not None:
+        print("redis worked for get_friends")
+        return eval(cached_friends)  
     user_data = await collection.find_one(
         {'user_id': user_id}, 
         {'invited': 1, '_id': 0}
@@ -159,6 +223,8 @@ async def get_friends(user_id):
             {'user_name': 1, '_id': 0}
         ).to_list(length=len(friend_ids))
         friends = [friend['user_name'] for friend in friends_data if 'user_name' in friend]
+        await redis.set(f"user:{user_id}:friends", str(friends),ex=600800)
+        print("redis set for get friends")
         return friends
     else:
         return None
