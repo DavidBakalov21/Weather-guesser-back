@@ -37,7 +37,8 @@ app = FastAPI(lifespan=lifespan)
 origins = [
     "http://localhost:3000",
     "https://davidbakalov21.github.io",
-    "https://renderweatherapp.onrender.com"
+    "https://renderweatherapp.onrender.com",
+    "https://renderweatherapp2.onrender.com"
 ]
 
 app.add_middleware(
