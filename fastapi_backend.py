@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create the Redis client and assign it to the app's state
-    redis_client = redis.Redis(host='redis://red-crn916m8ii6s73emn12g',port=6379, decode_responses=True)
+    redis_client = redis.Redis(host='redis://redis',port=6379, decode_responses=True)
    # redis_client = redis.Redis(host='redis',port=6379, decode_responses=True)
     app.state.redis = redis_client
     
