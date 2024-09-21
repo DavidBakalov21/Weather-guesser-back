@@ -103,35 +103,23 @@ async def update_inviter_list(inviter_id, invited_id, redis):
 
 
 async def update_user_points(user_id, points, redis):
-    updated_points = None
-    if redis is not None:
-        try:
-            # Try incrementing the points in Redis
-            updated_points = await redis.incrby(f"user:{user_id}:points", points)
-        except Exception as e:
-            print(f"Redis is unavailable, error: {str(e)}. Falling back to MongoDB.")
-            updated_points = None
+    user_data = await collection.find_one({'user_id': user_id}, {'points': 1, '_id': 0})
     
-    if updated_points is None:
-        # Fetch the current points from MongoDB
-        user_data = await collection.find_one({'user_id': user_id}, {'points': 1, '_id': 0})
-        
-        if user_data and 'points' in user_data:
-            # Manually increment the points
-            updated_points = user_data['points'] + points
-            
-            # Update MongoDB with the new points
-            await collection.update_one(
-                {'user_id': user_id},
-                {'$inc': {'points': points}},
-            )
-    else:
+    if user_data and 'points' in user_data:
+        updated_points = user_data['points'] + points
+
         await collection.update_one(
             {'user_id': user_id},
-            {'$set': {'points': updated_points}},
+            {'$inc': {'points': points}},
         )
+    if redis is not None:
+        if await redis.exists(f"user:{user_id}:points"):
+            await redis.incrby(f"user:{user_id}:points", points)
+        else:
+            await redis.incrby(f"user:{user_id}:points", updated_points)
 
-    return updated_points
+
+
 
 async def update_days(user_id, days, redis):
     await collection.update_one(
