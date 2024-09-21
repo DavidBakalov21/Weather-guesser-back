@@ -14,7 +14,8 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create the Redis client and assign it to the app's state
-    redis_client = redis.Redis(host='redis://red-crmtt8rqf0us7387i1m0',port=6379, decode_responses=True)
+    redis_client = redis.Redis(host='redis://red-crn916m8ii6s73emn12g',port=6379, decode_responses=True)
+   # redis_client = redis.Redis(host='redis',port=6379, decode_responses=True)
     app.state.redis = redis_client
     
     yield  # Yield control to allow the app to run
@@ -82,12 +83,16 @@ async def points_endpoint(data: UserData):
 #OK
 @app.post("/start")
 async def starter(data: UserData):
-    redis = app.state.redis
-    id = data.telegram_id
-    is_registered = await check_user(id, redis)
-    return {
-        'registered': is_registered
-    }
+    try:
+        redis = app.state.redis
+        id = data.telegram_id
+        is_registered = await check_user(id, redis)
+        return {
+            'registered': is_registered
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 #OK
 @app.post("/get_ref_link")
 async def get_link(data:UserData):
