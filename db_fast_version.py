@@ -1,9 +1,11 @@
 from consts import MONGO_STRING
 import certifi
+import json
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
-client = AsyncIOMotorClient(MONGO_STRING, tlsCAFile=certifi.where())
-#client = AsyncIOMotorClient("mongodb://host.docker.internal:27017/")
+client = AsyncIOMotorClient(MONGO_STRING, tlsCAFile=certifi.where())# default
+#client = AsyncIOMotorClient("mongodb://host.docker.internal:27017/")# docker
+#client = AsyncIOMotorClient("mongodb://localhost:27017/") #local
 db = client['weather_bot']
 collection = db['users']
 collection.create_index("user_id")
@@ -99,7 +101,8 @@ async def update_inviter_list(inviter_id, invited_id, redis):
     if user_data and 'invited' in user_data:
         print("redis set for get update_invite")
         if redis is not None:
-            await redis.set(f"user:{inviter_id}:invited", user_data['invited'],ex=404800) 
+            invited_data = json.dumps(user_data['invited'])  # Convert list to JSON string
+            await redis.set(f"user:{inviter_id}:invited", invited_data, ex=404800) 
 
 
 async def update_user_points(user_id, points, redis):
@@ -201,24 +204,44 @@ async def update_inviter_points(player_id, points,redis):
 
 async def get_friends(user_id, redis):
     if redis is not None:
-        cached_friends = await redis.get(f"user:{user_id}:friends")
-        if cached_friends is not None:
-            print("redis worked for get_friends")
-            return eval(cached_friends)  
-    user_data = await collection.find_one(
-        {'user_id': user_id}, 
-        {'invited': 1, '_id': 0}
-    )
-    if user_data and 'invited' in user_data:
-        friend_ids = user_data['invited']
+        cached_friends_data = await redis.get(f"user:{user_id}:invited")
+        if cached_friends_data:  # Only proceed if data exists in Redis
+            friend_ids = json.loads(cached_friends_data)  # Get user IDs from Redis
+            print(friend_ids)
+            print("Redis cache hit for invited friend IDs")
+        else:
+            # Fetch the invited user IDs from MongoDB if not found in Redis
+            user_data = await collection.find_one(
+                {'user_id': user_id}, 
+                {'invited': 1, '_id': 0}
+            )
+            if user_data and 'invited' in user_data:
+                friend_ids = user_data['invited']
+                # Cache the invited user IDs in Redis
+                await redis.set(f"user:{user_id}:invited", json.dumps(friend_ids), ex=404800)
+                print("Redis cache set for invited friend IDs")
+            else:
+                return []  # Return an empty list if no friends are found
+    else:
+        # Redis is unavailable, so fetch from MongoDB
+        user_data = await collection.find_one(
+            {'user_id': user_id}, 
+            {'invited': 1, '_id': 0}
+        )
+        if user_data and 'invited' in user_data:
+            friend_ids = user_data['invited']
+        else:
+            return []
+
+    # Fetch the friends' usernames from MongoDB using the friend_ids
+    if friend_ids:
         friends_data = await collection.find(
             {'user_id': {'$in': friend_ids}}, 
             {'user_name': 1, '_id': 0}
         ).to_list(length=len(friend_ids))
+
+        # Extract the 'user_name' from the results
         friends = [friend['user_name'] for friend in friends_data if 'user_name' in friend]
-        if redis is not None:
-            await redis.set(f"user:{user_id}:friends", str(friends),ex=600800)
-            print("redis set for get friends")
         return friends
     else:
-        return None
+        return []
