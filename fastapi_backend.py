@@ -9,7 +9,6 @@ from typing import Optional
 import math
 import redis.asyncio as redis
 from contextlib import asynccontextmanager
-from aiogram.utils.web_app import safe_parse_webapp_init_data
 from const import TOKEN
 
 @asynccontextmanager
@@ -95,11 +94,9 @@ async def starter(data: UserData):
     try:
         redis = app.state.redis
         id = data.telegram_id
-        user_Data=safe_parse_webapp_init_data(TOKEN, data.u_data) #tg
         is_registered = await check_user(id, redis)
         return {
-            'registered': is_registered,
-            "userData":user_Data #tg
+            'registered': is_registered
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
